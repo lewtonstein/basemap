@@ -3192,7 +3192,7 @@ class Basemap(object):
                     self._fulldisk) or self.round or
                     self.projection in _pseudocyl):
                 # first draw boundary, no fill
-                limb1 = self.drawmapboundary(fill_color='none', ax=ax)
+                #limb1 = self.drawmapboundary(fill_color='none', ax=ax) #lewton comment out this line
                 # draw another filled patch, with no boundary.
                 limb2 = self.drawmapboundary(linewidth=0, ax=ax)
                 self._mapboundarydrawn = limb2
