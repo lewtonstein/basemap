@@ -18,10 +18,20 @@ heavy lifting), and the following functions:
 import os
 import sys
 import math
+import warnings
 import functools
+try:
+    from urllib2 import urlopen
+    from urllib import urlretrieve
+except ImportError:
+    from urllib.request import urlopen
+    from urllib.request import urlretrieve
+
 import numpy as np
 import numpy.ma as ma
+
 import matplotlib as mpl
+from matplotlib.artist import Artist
 from matplotlib.collections import LineCollection
 from matplotlib.collections import PolyCollection
 from matplotlib.image import imread
@@ -32,18 +42,13 @@ from matplotlib.patches import FancyArrowPatch
 from matplotlib.patches import Polygon
 from matplotlib.transforms import Bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-try:
-    from urllib2 import urlopen
-    from urllib import urlretrieve
-except ImportError:
-    from urllib.request import urlopen
-    from urllib.request import urlretrieve
+
 import pyproj
-from . proj import Proj
 import _geoslib
+from . proj import Proj
 
 
-__version__ = "1.4.0-dev"
+__version__ = "1.5.0-dev"
 
 # basemap data files now installed in lib/matplotlib/toolkits/basemap/data
 # check to see if environment variable BASEMAPDATA set to a directory,
@@ -504,7 +509,8 @@ _unsupported_projection.append(supported_projections)
 _unsupported_projection = ''.join(_unsupported_projection)
 
 def _validated_ll(param, name, minval, maxval):
-    param = float(param)
+    item = np.squeeze(param)
+    param = float(param if item.shape else item)
     if param > maxval or param < minval:
         raise ValueError('%s must be between %f and %f degrees' %
                                            (name, minval, maxval))
@@ -1977,7 +1983,7 @@ class Basemap(object):
         county_info = self.readshapefile(gis_file,'counties',\
                       default_encoding='latin-1',drawbounds=drawbounds)
         counties = [coords for coords in self.counties]
-        counties = PolyCollection(counties)
+        counties = PolyCollection(counties, antialiaseds=(antialiased,))
         counties.set_linestyle(linestyle)
         counties.set_linewidth(linewidth)
         counties.set_edgecolor(color)
@@ -2065,9 +2071,9 @@ class Basemap(object):
 
         .. tabularcolumns:: |l|L|
 
-        ==============   ====================================================
+        ================ ====================================================
         Argument         Description
-        ==============   ====================================================
+        ================ ====================================================
         shapefile        path to shapefile components.  Example:
                          shapefile='/home/jeff/esri/world_borders' assumes
                          that world_borders.shp, world_borders.shx and
@@ -2085,7 +2091,7 @@ class Basemap(object):
                          shapes are split out into separate polygons, and
                          additional keys 'RINGNUM' and 'SHAPENUM' are added
                          to the shape attribute dictionary.
-        ==============   ====================================================
+        ================ ====================================================
 
         The following optional keyword arguments are only relevant for Polyline
         and Polygon shape types, for Point and MultiPoint shapes they are
@@ -2093,9 +2099,9 @@ class Basemap(object):
 
         .. tabularcolumns:: |l|L|
 
-        ==============   ====================================================
+        ================ =====================================================
         Keyword          Description
-        ==============   ====================================================
+        ================ =====================================================
         drawbounds       draw boundaries of shapes (default True).
         zorder           shape boundary zorder (if not specified,
                          default for mathplotlib.lines.LineCollection
@@ -2109,7 +2115,7 @@ class Basemap(object):
                          (default utf-8)
         encoding_errors  encoding error handling (default strict), other
                          possible values: ignore, replace and backslashreplace
-        ==============   ====================================================
+        ================ =====================================================
 
         A tuple (num_shapes, type, min, max) containing shape file info
         is returned.
@@ -2195,7 +2201,7 @@ class Basemap(object):
             # get current axes instance (if none specified).
             ax = ax or self._check_ax()
             # make LineCollections for each polygon.
-            lines = LineCollection(coords,antialiaseds=(1,))
+            lines = LineCollection(coords,antialiaseds=(antialiased,))
             lines.set_color(color)
             lines.set_linewidth(linewidth)
             lines.set_label('_nolabel_')
@@ -2215,7 +2221,7 @@ class Basemap(object):
                       dashes=[1,1],labels=[0,0,0,0],labelstyle=None, \
                       fmt='%g',xoffset=None,yoffset=None,ax=None,latmax=None,
                       **text_kwargs):
-        """
+        r"""
         Draw and label parallels (latitude lines) for values (in degrees)
         given in the sequence ``circles``.
 
@@ -2493,7 +2499,7 @@ class Basemap(object):
                       dashes=[1,1],labels=[0,0,0,0],labelstyle=None,\
                       fmt='%g',xoffset=None,yoffset=None,ax=None,latmax=None,
                       **text_kwargs):
-        """
+        r"""
         Draw and label meridians (longitude lines) for values (in degrees)
         given in the sequence ``meridians``.
 
@@ -2800,7 +2806,7 @@ class Basemap(object):
         return meridict
 
     def tissot(self,lon_0,lat_0,radius_deg,npts,ax=None,**kwargs):
-        """
+        r"""
         Draw a polygon centered at ``lon_0,lat_0``.  The polygon
         approximates a circle on the surface of the earth with radius
         ``radius_deg`` degrees latitude along longitude ``lon_0``,
@@ -2857,7 +2863,7 @@ class Basemap(object):
         return x,y
 
     def drawgreatcircle(self,lon1,lat1,lon2,lat2,del_s=100.,**kwargs):
-        """
+        r"""
         Draw a great circle on the map from the longitude-latitude
         pair ``lon1,lat1`` to ``lon2,lat2``
 
@@ -3194,7 +3200,7 @@ class Basemap(object):
                 # first draw boundary, no fill
                 #limb1 = self.drawmapboundary(fill_color='none', ax=ax) #lewton comment out this line
                 # draw another filled patch, with no boundary.
-                limb2 = self.drawmapboundary(linewidth=0, ax=ax)
+                limb2 = self.drawmapboundary(fill_color='none', linewidth=0, ax=ax)
                 self._mapboundarydrawn = limb2
         # for elliptical map, always turn off axis_frame.
         if ((self.projection in ['ortho', 'geos', 'nsper', 'aeqd'] and
@@ -3231,7 +3237,7 @@ class Basemap(object):
 
     @_transform1d
     def scatter(self, *args, **kwargs):
-        """
+        r"""
         Plot points with markers on the map
         (see matplotlib.pyplot.scatter documentation).
 
@@ -3263,7 +3269,7 @@ class Basemap(object):
 
     @_transform1d
     def plot(self, *args, **kwargs):
-        """
+        r"""
         Draw lines and/or markers on the map
         (see matplotlib.pyplot.plot documentation).
 
@@ -3291,7 +3297,7 @@ class Basemap(object):
         return ret
 
     def imshow(self, *args, **kwargs):
-        """
+        r"""
         Display an image over the map
         (see matplotlib.pyplot.imshow documentation).
 
@@ -3311,7 +3317,9 @@ class Basemap(object):
             kwargs['origin']='lower'
         self._save_use_hold(ax, kwargs)
         try:
-            ret =  ax.imshow(*args, **kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=DeprecationWarning)
+                ret = ax.imshow(*args, **kwargs)
         finally:
             self._restore_hold(ax)
         # reset current active image (only if pyplot is imported).
@@ -3325,7 +3333,7 @@ class Basemap(object):
 
     @_transform
     def pcolor(self,x,y,data,**kwargs):
-        """
+        r"""
         Make a pseudo-color plot over the map
         (see matplotlib.pyplot.pcolor documentation).
 
@@ -3398,7 +3406,7 @@ class Basemap(object):
 
     @_transform
     def pcolormesh(self,x,y,data,**kwargs):
-        """
+        r"""
         Make a pseudo-color plot over the map
         (see matplotlib.pyplot.pcolormesh documentation).
 
@@ -3457,7 +3465,7 @@ class Basemap(object):
         return ret
 
     def hexbin(self,x,y,**kwargs):
-        """
+        r"""
         Make a hexagonal binning plot of x versus y, where x, y are 1-D
         sequences of the same length, N. If C is None (the default), this is a
         histogram of the number of occurences of the observations at
@@ -3499,7 +3507,7 @@ class Basemap(object):
 
     @_transform
     def contour(self,x,y,data,*args,**kwargs):
-        """
+        r"""
         Make a contour plot over the map
         (see matplotlib.pyplot.contour documentation).
 
@@ -3585,12 +3593,16 @@ class Basemap(object):
         # set axes limits to fit map region.
         self.set_axes_limits(ax=ax)
         # clip to map limbs
-        CS.collections,c = self._cliplimb(ax,CS.collections)
+        if isinstance(CS, Artist):
+            # Since MPL 3.8, `QuadContourSet` objects are `Artist` objects too.
+            CS, c = self._cliplimb(ax, CS)
+        else:
+            CS.collections, c = self._cliplimb(ax, CS.collections)
         return CS
 
     @_transform
     def contourf(self,x,y,data,*args,**kwargs):
-        """
+        r"""
         Make a filled contour plot over the map
         (see matplotlib.pyplot.contourf documentation).
 
@@ -3681,12 +3693,16 @@ class Basemap(object):
         # set axes limits to fit map region.
         self.set_axes_limits(ax=ax)
         # clip to map limbs
-        CS.collections,c = self._cliplimb(ax,CS.collections)
+        if isinstance(CS, Artist):
+            # Since MPL 3.8, `QuadContourSet` objects are `Artist` objects too.
+            CS, c = self._cliplimb(ax, CS)
+        else:
+            CS.collections, c = self._cliplimb(ax, CS.collections)
         return CS
 
     @_transformuv
     def quiver(self, x, y, u, v, *args, **kwargs):
-        """
+        r"""
         Make a vector plot (u, v) with arrows on the map.
 
         Arguments may be 1-D or 2-D arrays or sequences
@@ -3719,7 +3735,7 @@ class Basemap(object):
 
     @_transformuv
     def streamplot(self, x, y, u, v, *args, **kwargs):
-        """
+        r"""
         Draws streamlines of a vector flow.
         (see matplotlib.pyplot.streamplot documentation).
 
@@ -3756,7 +3772,7 @@ class Basemap(object):
 
     @_transformuv
     def barbs(self, x, y, u, v, *args, **kwargs):
-        """
+        r"""
         Make a wind barb plot (u, v) with on the map.
         (see matplotlib.pyplot.barbs documentation).
 
@@ -3801,7 +3817,7 @@ class Basemap(object):
 
     def drawlsmask(self,land_color="0.8",ocean_color="w",lsmask=None,
                    lsmask_lons=None,lsmask_lats=None,lakes=True,resolution='l',grid=5,**kwargs):
-        """
+        r"""
         Draw land-sea mask image.
 
         .. note::
@@ -3948,60 +3964,113 @@ class Basemap(object):
         im,c = self._cliplimb(ax,im)
         return im
 
-    def bluemarble(self,ax=None,scale=None,**kwargs):
-        """
-        display blue marble image (from http://visibleearth.nasa.gov)
-        as map background.
-        Default image size is 5400x2700, which can be quite slow and
-        use quite a bit of memory.  The ``scale`` keyword can be used
-        to downsample the image (``scale=0.5`` downsamples to 2700x1350).
+    def bluemarble(self, ax=None, scale=None, **kwargs):
+        r"""Display blue marble image as map background.
 
-        \**kwargs passed on to :meth:`imshow`.
+        The original image is available at::
 
-        returns a matplotlib.image.AxesImage instance.
+            https://visibleearth.nasa.gov/
+
+        The default image size is 5400x2700, which can be a bit slow
+        memory-consuming. The ``scale`` keyword allows to downsample
+        the image (e.g. ``scale=0.5`` downsamples to 2700x1350).
+
+        Parameters
+        ----------
+
+        ax : matplotlib.image.AxesImage, optional
+            if given, alternative axes instance where the image is drawn
+
+        scale : float, optional
+            if given, rescale the image by the given factor
+
+        \**kwargs : dict, optional
+            keyword arguments passed on to :meth:`Basemap.imshow`.
+
+        Returns
+        -------
+
+        ax : matplotlib.image.AxesImage
+            axes instance
         """
+
+        image = "bluemarble"
         if ax is not None:
-            return self.warpimage(image='bluemarble',ax=ax,scale=scale,**kwargs)
-        else:
-            return self.warpimage(image='bluemarble',scale=scale,**kwargs)
+            return self.warpimage(image=image, ax=ax, scale=scale, **kwargs)
+        return self.warpimage(image=image, scale=scale, **kwargs)
 
-    def shadedrelief(self,ax=None,scale=None,**kwargs):
+    def shadedrelief(self, ax=None, scale=None, **kwargs):
+        r"""Display shaded relief image as map background.
+
+        The original image is available at::
+
+            https://www.shadedrelief.com/
+
+        The default image size is 5400x2700, which can be a bit slow
+        memory-consuming. The ``scale`` keyword allows to downsample
+        the image (e.g. ``scale=0.5`` downsamples to 2700x1350).
+
+        Parameters
+        ----------
+
+        ax : matplotlib.image.AxesImage, optional
+            if given, alternative axes instance where the image is drawn
+
+        scale : float, optional
+            if given, rescale the image by the given factor
+
+        \**kwargs : dict, optional
+            keyword arguments passed on to :meth:`Basemap.imshow`.
+
+        Returns
+        -------
+
+        ax : matplotlib.image.AxesImage
+            axes instance
         """
-        display shaded relief image (from http://www.shadedrelief.com)
-        as map background.
-        Default image size is 10800x5400, which can be quite slow and
-        use quite a bit of memory.  The ``scale`` keyword can be used
-        to downsample the image (``scale=0.5`` downsamples to 5400x2700).
 
-        \**kwargs passed on to :meth:`imshow`.
-
-        returns a matplotlib.image.AxesImage instance.
-        """
+        image = "shadedrelief"
         if ax is not None:
-            return self.warpimage(image='shadedrelief',ax=ax,scale=scale,**kwargs)
-        else:
-            return self.warpimage(image='shadedrelief',scale=scale,**kwargs)
+            return self.warpimage(image=image, ax=ax, scale=scale, **kwargs)
+        return self.warpimage(image=image, scale=scale, **kwargs)
 
-    def etopo(self,ax=None,scale=None,**kwargs):
+    def etopo(self, ax=None, scale=None, **kwargs):
+        r"""Display ETOPO relief image as map background.
+
+        The original image is available at::
+
+            http://www.ngdc.noaa.gov/mgg/global/global.html
+
+        The default image size is 5400x2700, which can be a bit slow
+        memory-consuming. The ``scale`` keyword allows to downsample
+        the image (e.g. ``scale=0.5`` downsamples to 2700x1350).
+
+        Parameters
+        ----------
+
+        ax : matplotlib.image.AxesImage, optional
+            if given, alternative axes instance where the image is drawn
+
+        scale : float, optional
+            if given, rescale the image by the given factor
+
+        \**kwargs : dict, optional
+            keyword arguments passed on to :meth:`Basemap.imshow`.
+
+        Returns
+        -------
+
+        ax : matplotlib.image.AxesImage
+            axes instance
         """
-        display etopo relief image (from
-        http://www.ngdc.noaa.gov/mgg/global/global.html)
-        as map background.
-        Default image size is 5400x2700, which can be quite slow and
-        use quite a bit of memory.  The ``scale`` keyword can be used
-        to downsample the image (``scale=0.5`` downsamples to 5400x2700).
 
-        \**kwargs passed on to :meth:`imshow`.
-
-        returns a matplotlib.image.AxesImage instance.
-        """
+        image = "etopo"
         if ax is not None:
-            return self.warpimage(image='etopo',ax=ax,scale=scale,**kwargs)
-        else:
-            return self.warpimage(image='etopo',scale=scale,**kwargs)
+            return self.warpimage(image=image, ax=ax, scale=scale, **kwargs)
+        return self.warpimage(image=image, scale=scale, **kwargs)
 
     def warpimage(self,image="bluemarble",scale=None,**kwargs):
-        """
+        r"""
         Display an image (filename given by ``image`` keyword) as a map background.
         If image is a URL (starts with 'http'), it is downloaded to a temp
         file using urllib.urlretrieve.
@@ -4035,7 +4104,15 @@ class Basemap(object):
                 raise ImportError("warpimage method requires PIL "
                                   "(http://pillow.readthedocs.io)")
 
-        from matplotlib.image import pil_to_array
+        import matplotlib.image as mpimg
+
+        def pil_to_array(*args, **kwargs):
+            """Call :func:`~mpimg.pil_to_array` ignoring deprecation warnings."""
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=DeprecationWarning)
+                return mpimg.pil_to_array(*args, **kwargs)
+
         if self.celestial:
             raise ValueError("warpimage does not work in celestial coordinates")
         ax = kwargs.pop('ax', None) or self._check_ax()
@@ -4146,9 +4223,9 @@ class Basemap(object):
                     lonsr,latsr = self(x,y,inverse=True)
                     mask = ma.zeros((ny,nx,4),np.int8)
                     lon_0 = self.projparams['lon_0']
-                    lonright = lon_0+180.
-                    lonleft = lon_0-180.
-                    x1 = np.array(ny*[0.5*(self.xmax + self.xmin)],np.float)
+                    lonright = lon_0 + 180. - 1E-10
+                    lonleft = lon_0 - 180. + 1E-10
+                    x1 = np.array(ny*[0.5*(self.xmax + self.xmin)],np.float64)
                     y1 = np.linspace(self.ymin, self.ymax, ny)
                     lons1, lats1 = self(x1,y1,inverse=True)
                     lats1 = np.where(lats1 < -89.999999, -89.999999, lats1)
@@ -4180,45 +4257,56 @@ class Basemap(object):
         im,c = self._cliplimb(ax,im)
         return im
 
-    def arcgisimage(self,server='http://server.arcgisonline.com/ArcGIS',\
-                 service='World_Imagery',xpixels=400,ypixels=None,\
-                 dpi=96,cachedir=None,verbose=False,**kwargs):
+    def arcgisimage(self, server="http://server.arcgisonline.com/ArcGIS",
+                    service="World_Imagery", xpixels=400, ypixels=None,
+                    dpi=96, cachedir=None, verbose=False, **kwargs):
+        r"""Display background image using ArcGIS Server REST API.
+
+        In order to use this method, the :class:`Basemap` instance
+        must be created using the ``epsg`` keyword to define the
+        map projection, unless the "cyl" projection is used (in
+        which case the EPSG code 4326 is assumed).
+
+        Parameters
+        ----------
+
+        server : str, optional
+            base URL of the web map server
+
+        service : str, optional
+            service (image type) hosted by the server
+
+        xpixels : int, optional
+            requested number of image pixels in the `x`-direction
+
+        ypixels : int, optional
+            requested number of image pixels in the `y`-direction;
+            if not given, it is inferred from ``xpixels`` and the
+            aspect ratio of the map projection region
+
+        dpi : int, optional
+            device resolution of the exported image
+
+        cachedir : str, optional
+            if given, directory to use as cache folder for the images
+            retrieved from the server
+
+        verbose : bool, optional
+            if True, print debugging information
+
+        \**kwargs : dict, optional
+            keyword-only arguments; currently, only ``ax`` is supported
+            to override the default :class:`matplotlib.axes.Axes`
+            instance
+
+        Returns
+        -------
+
+        aximg : matplotlib.image.AxesImage
+            image axes instance
         """
-        Retrieve an image using the ArcGIS Server REST API and display it on
-        the map. In order to use this method, the Basemap instance must be
-        created using the ``epsg`` keyword to define the map projection, unless
-        the ``cyl`` projection is used (in which case the epsg code 4326 is
-        assumed).
 
-        .. tabularcolumns:: |l|L|
-
-        ==============   ====================================================
-        Keywords         Description
-        ==============   ====================================================
-        server           web map server URL (default
-                         http://server.arcgisonline.com/ArcGIS).
-        service          service (image type) hosted on server (default
-                         'World_Imagery', which is NASA 'Blue Marble'
-                         image).
-        xpixels          requested number of image pixels in x-direction
-                         (default 400).
-        ypixels          requested number of image pixels in y-direction.
-                         Default (None) is to infer the number from
-                         from xpixels and the aspect ratio of the
-                         map projection region.
-        dpi              The device resolution of the exported image (dots per
-                         inch, default 96).
-        cachedir         An optional directory to use as cache folder for the retrieved images.
-        verbose          if True, print URL used to retrieve image (default
-                         False).
-        ==============   ====================================================
-
-        Extra keyword ``ax`` can be used to override the default axis instance.
-
-        returns a matplotlib.image.AxesImage instance.
-        """
-
-        # fix PIL import on some versions of OSX and scipy
+        # Fix PIL import on some versions of OSX and scipy.
         try:
             from PIL import Image
         except ImportError:
@@ -4228,70 +4316,76 @@ class Basemap(object):
                 raise ImportError("arcgisimage method requires PIL "
                                   "(http://pillow.readthedocs.io)")
 
-        if not hasattr(self,'epsg'):
+        if not hasattr(self, "epsg"):
             raise ValueError("the Basemap instance must be created using "
                              "an EPSG code (http://spatialreference.org) "
                              "in order to use the wmsmap method")
-        ax = kwargs.pop('ax', None) or self._check_ax()
-        # find the x,y values at the corner points.
-        p = pyproj.Proj(init="epsg:%s" % self.epsg, preserve_units=True)
-        xmin,ymin = p(self.llcrnrlon,self.llcrnrlat)
-        xmax,ymax = p(self.urcrnrlon,self.urcrnrlat)
+
+        ax = kwargs.pop("ax", None) or self._check_ax()
+
+        # Find the `(x, y)` values at the corner points.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            p = pyproj.Proj(init="epsg:%s" % self.epsg, preserve_units=True)
+        xmin, ymin = p(self.llcrnrlon, self.llcrnrlat)
+        xmax, ymax = p(self.urcrnrlon, self.urcrnrlat)
         if self.projection in _cylproj:
-            Dateline =\
-            _geoslib.Point(self(180.,0.5*(self.llcrnrlat+self.urcrnrlat)))
-            hasDateline = Dateline.within(self._boundarypolyxy)
-            if hasDateline:
+            dateline = _geoslib.Point(self(180., 0.5 * (self.llcrnrlat + self.urcrnrlat)))
+            if dateline.within(self._boundarypolyxy):
                 raise ValueError("arcgisimage cannot handle images that cross "
                                  "the dateline for cylindrical projections")
-        # ypixels not given, find by scaling xpixels by the map aspect ratio.
+
+        # If ypixels is not given, compute it with xpixels and aspect ratio.
         if ypixels is None:
-            ypixels = int(self.aspect*xpixels)
-        # construct a URL using the ArcGIS Server REST API.
-        basemap_url = \
-"%s/rest/services/%s/MapServer/export?\
-bbox=%s,%s,%s,%s&\
-bboxSR=%s&\
-imageSR=%s&\
-size=%s,%s&\
-dpi=%s&\
-format=png32&\
-transparent=true&\
-f=image" %\
-(server,service,xmin,ymin,xmax,ymax,self.epsg,self.epsg,xpixels,ypixels,dpi)
-        # print URL?
-        if verbose: print(basemap_url)
+            ypixels = int(self.aspect * xpixels)
 
-        if cachedir != None:
+        # Construct a URL using the ArcGIS Server REST API.
+        basemap_url = "".join([
+            "%s/rest/services/%s/MapServer/export?",
+            "bbox=%s,%s,%s,%s&",
+            "bboxSR=%s&",
+            "imageSR=%s&",
+            "size=%s,%s&",
+            "dpi=%s&",
+            "format=png32&",
+            "transparent=true&",
+            "f=image",
+        ]) % (server, service, xmin, ymin, xmax, ymax, self.epsg, self.epsg, xpixels, ypixels, dpi)
+
+        # Print URL in verbose mode.
+        if verbose:  # pragma: no cover
+            print(basemap_url)
+
+        # Try to return fast if cache is enabled.
+        if cachedir is not None:
             # Generate a filename for the cached file.
-            filename = "%s-bbox-%s-%s-%s-%s-bboxsr%s-imagesr%s-size-%s-%s-dpi%s.png" %\
-            (service,xmin,ymin,xmax,ymax,self.epsg,self.epsg,xpixels,ypixels,dpi)
-
-             # Check if the cache directory exists, if not create it.
-            if not os.path.exists(cachedir):
-                os.makedirs(cachedir)
-
-            # Check if the image is already in the cachedir folder.
-            cache_path = cachedir + filename
-
+            filename = "%s-bbox-%s-%s-%s-%s-bboxsr%s-imagesr%s-size-%s-%s-dpi%s.png" % \
+                (service, xmin, ymin, xmax, ymax, self.epsg, self.epsg, xpixels, ypixels, dpi)
+            # Return fast if the image is already in the cache.
+            cache_path = os.path.join(cachedir, filename)
             if os.path.isfile(cache_path):
-                print('Image already in cache')
+                if verbose:  # pragma: no cover
+                    print("Image already in cache")
                 img = Image.open(cache_path)
-                return basemap.imshow(img, ax=ax, origin='upper')
-            else:
-                # Retrieve and save image
-                img = Image.open(urlopen(basemap_url))
-                img.save(cache_path)
-        else:
-            img = Image.open(urlopen(basemap_url))
+                return self.imshow(img, ax=ax, origin="upper")
 
-        # return AxesImage instance.
-        return self.imshow(img, ax=ax, origin='upper')
+        # Retrieve image from the remote server.
+        import contextlib
+        conn = urlopen(basemap_url)
+        with contextlib.closing(conn):
+            img = Image.open(conn)
+            # Save to cache if requested.
+            if cachedir is not None:
+                # Check if the cache directory exists, if not create it.
+                if not os.path.exists(cachedir):
+                    os.makedirs(cachedir)
+                img.save(cache_path)
+        return self.imshow(img, ax=ax, origin="upper")
 
     def wmsimage(self,server,\
                  xpixels=400,ypixels=None,\
                  format='png',alpha=None,verbose=False,**kwargs):
-        """
+        r"""
         Retrieve an image using from a WMS server using the
         Open Geospatial Consortium (OGC) standard interface
         and display on the map. Requires OWSLib
@@ -4339,7 +4433,9 @@ f=image" %\
         if 'layers' not in kwargs:
             raise ValueError('no layers specified')
         # find the x,y values at the corner points.
-        p = pyproj.Proj(init="epsg:%s" % self.epsg, preserve_units=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            p = pyproj.Proj(init="epsg:%s" % self.epsg, preserve_units=True)
         xmin,ymin = p(self.llcrnrlon,self.llcrnrlat)
         xmax,ymax = p(self.urcrnrlon,self.urcrnrlat)
         if self.projection in _cylproj:
@@ -4444,20 +4540,21 @@ f=image" %\
         xc,yc = self(lon,lat)
         # make sure lon_0 between -180 and 180
         lon_0 = ((lon0+360) % 360) - 360
+        degchar = b"\xc2\xb0".decode("utf-8")
         if lat0>0:
             if lon>0:
-                lonlatstr = u'%g\N{DEGREE SIGN}N, %g\N{DEGREE SIGN}E' % (lat0,lon_0)
+                lonlatstr = '%g%sN, %g%sE' % (lat0, degchar, lon_0, degchar)
             elif lon<0:
-                lonlatstr = u'%g\N{DEGREE SIGN}N, %g\N{DEGREE SIGN}W' % (lat0,lon_0)
+                lonlatstr = '%g%sN, %g%sW' % (lat0, degchar, lon_0, degchar)
             else:
-                lonlatstr = u'%g\N{DEGREE SIGN}, %g\N{DEGREE SIGN}W' % (lat0,lon_0)
+                lonlatstr = '%g%s, %g%sW' % (lat0, degchar, lon_0, degchar)
         else:
             if lon>0:
-                lonlatstr = u'%g\N{DEGREE SIGN}S, %g\N{DEGREE SIGN}E' % (lat0,lon_0)
+                lonlatstr = '%g%sS, %g%sE' % (lat0, degchar, lon_0, degchar)
             elif lon<0:
-                lonlatstr = u'%g\N{DEGREE SIGN}S, %g\N{DEGREE SIGN}W' % (lat0,lon_0)
+                lonlatstr = '%g%sS, %g%sW' % (lat0, degchar, lon_0, degchar)
             else:
-                lonlatstr = u'%g\N{DEGREE SIGN}S, %g\N{DEGREE SIGN}' % (lat0,lon_0)
+                lonlatstr = '%g%sS, %g%s' % (lat0, degchar, lon_0, degchar)
         # left edge of scale
         lon1,lat1 = self(x0-length/2,y0,inverse=True)
         x1,y1 = self(lon1,lat1)
@@ -4568,7 +4665,7 @@ f=image" %\
         return rets
 
     def colorbar(self,mappable=None,location='right',size="5%",pad='2%',fig=None,ax=None,**kwargs):
-        """
+        r"""
         Add colorbar to axes associated with a map.
         The colorbar axes instance is created using the axes_grid toolkit.
 
@@ -4658,12 +4755,18 @@ f=image" %\
         # contour the day-night grid, coloring the night area
         # with the specified color and transparency.
         CS = self.contourf(x,y,daynight,1,colors=[color],alpha=alpha,ax=ax)
-        # set zorder on ContourSet collections show night shading
-        # is on top.
-        for c in CS.collections:
-            c.set_zorder(zorder)
-        # clip to map limbs
-        CS.collections,c = self._cliplimb(ax,CS.collections)
+        if isinstance(CS, Artist):
+            # Since MPL 3.8, `QuadContourSet` objects are `Artist` objects too.
+            CS.set_zorder(zorder)
+            # clip to map limbs
+            CS, c = self._cliplimb(ax, CS)
+        else:
+            # set zorder on ContourSet collections show night shading
+            # is on top.
+            for c in CS.collections:
+                c.set_zorder(zorder)
+            # clip to map limbs
+            CS.collections, c = self._cliplimb(ax, CS.collections)
         return CS
 
     def _check_ax(self):
@@ -4710,17 +4813,17 @@ f=image" %\
 
         .. tabularcolumns:: |l|L|
 
-        ==============   ====================================================
+        ================ ======================================================
         Arguments        Description
-        ==============   ====================================================
+        ================ ======================================================
         lonsin           original 1-d or 2-d longitudes.
-        ==============   ====================================================
+        ================ ======================================================
 
         .. tabularcolumns:: |l|L|
 
-        ==============   ====================================================
+        ================ ======================================================
         Keywords         Description
-        ==============   ====================================================
+        ================ ======================================================
         datain           original 1-d or 2-d data. Default None.
         lon_0            center of map projection region. Defaut None,
                          given by current map projection.
@@ -4731,7 +4834,7 @@ f=image" %\
                          If False do not reindex longitudes and data, but do
                          make sure that longitudes are in the
                          [lon_0-180, lon_0+180] range.
-        ==============   ====================================================
+        ================ ======================================================
 
         if datain given, returns ``dataout,lonsout`` (data and longitudes shifted to fit in interval
         [lon_0-180,lon_0+180]), otherwise just returns longitudes.  If
@@ -4768,7 +4871,11 @@ f=image" %\
 
             # if no shift necessary, itemindex will be
             # empty, so don't do anything
+<<<<<<< HEAD
             if fix_wrap_around and np.size(itemindex)>0:
+=======
+            if fix_wrap_around and np.all(itemindex != 0) and itemindex.size:
+>>>>>>> 461b40269088c936e2feaea12a33991bd96b63b5
                 # check to see if cyclic (wraparound) point included
                 # if so, remove it.
                 if np.abs(lonsin1[0]-lonsin1[-1]) < 1.e-4:
@@ -4810,7 +4917,11 @@ f=image" %\
             else:
                 itemindex = 0
 
+<<<<<<< HEAD
             if fix_wrap_around and np.size(itemindex)>0:
+=======
+            if fix_wrap_around and np.all(itemindex != 0) and itemindex.size:
+>>>>>>> 461b40269088c936e2feaea12a33991bd96b63b5
                 # check to see if cyclic (wraparound) point included
                 # if so, remove it.
                 if np.abs(lonsin[0]-lonsin[-1]) < 1.e-4:
@@ -5226,76 +5337,86 @@ class _dict(dict):
         self[key].remove()
         super(_dict, self).__delitem__(key)
 
-def _setlonlab(fmt,lon,labelstyle):
-    # set lon label string (called by Basemap.drawmeridians)
-    try: # fmt is a function that returns a formatted string
+
+def _setlonlab(fmt, lon, labelstyle):
+    """Set longitude label string (called by :meth:`Basemap.drawmeridians`)."""
+
+    try:
+        # `fmt` is a function that returns a formatted string.
         lonlab = fmt(lon)
-    except: # fmt is a format string.
-        if lon>180:
-            if mpl.rcParams['text.usetex']:
-                if labelstyle=='+/-':
-                    lonlabstr = r'${\/-%s\/^{\circ}}$'%fmt
+    except:
+        # `fmt` is a format string.
+        degchar = b"\xc2\xb0".decode("utf-8")
+        if lon > 180:
+            if mpl.rcParams["text.usetex"]:
+                if labelstyle == "+/-":
+                    lonlabstr = r"${\/-%s\/^{\circ}}$" % fmt
                 else:
-                    lonlabstr = r'${%s\/^{\circ}\/W}$'%fmt
+                    lonlabstr = r"${%s\/^{\circ}\/W}$" % fmt
             else:
-                if labelstyle=='+/-':
-                    lonlabstr = u'-%s\N{DEGREE SIGN}'%fmt
+                if labelstyle == "+/-":
+                    lonlabstr = r"-%s%s" % (fmt, degchar)
                 else:
-                    lonlabstr = u'%s\N{DEGREE SIGN}W'%fmt
-            lonlab = lonlabstr%np.fabs(lon-360)
-        elif lon<180 and lon != 0:
-            if mpl.rcParams['text.usetex']:
-                if labelstyle=='+/-':
-                    lonlabstr = r'${\/+%s\/^{\circ}}$'%fmt
+                    lonlabstr = r"%s%sW" % (fmt, degchar)
+            lonlab = lonlabstr % np.fabs(lon - 360)
+        elif lon < 180 and lon != 0:
+            if mpl.rcParams["text.usetex"]:
+                if labelstyle == "+/-":
+                    lonlabstr = r"${\/+%s\/^{\circ}}$" % fmt
                 else:
-                    lonlabstr = r'${%s\/^{\circ}\/E}$'%fmt
+                    lonlabstr = r"${%s\/^{\circ}\/E}$" % fmt
             else:
-                if labelstyle=='+/-':
-                    lonlabstr = u'+%s\N{DEGREE SIGN}'%fmt
+                if labelstyle == "+/-":
+                    lonlabstr = r"+%s%s" % (fmt, degchar)
                 else:
-                    lonlabstr = u'%s\N{DEGREE SIGN}E'%fmt
-            lonlab = lonlabstr%lon
+                    lonlabstr = r"%s%sE" % (fmt, degchar)
+            lonlab = lonlabstr % lon
         else:
-            if mpl.rcParams['text.usetex']:
-                lonlabstr = r'${%s\/^{\circ}}$'%fmt
+            if mpl.rcParams["text.usetex"]:
+                lonlabstr = r"${%s\/^{\circ}}$" % fmt
             else:
-                lonlabstr = u'%s\N{DEGREE SIGN}'%fmt
-            lonlab = lonlabstr%lon
+                lonlabstr = r"%s%s" % (fmt, degchar)
+            lonlab = lonlabstr % lon
     return lonlab
 
-def _setlatlab(fmt,lat,labelstyle):
-    # set lat label string (called by Basemap.drawparallels)
-    try: # fmt is a function that returns a formatted string
-           latlab = fmt(lat)
-    except: # fmt is a format string.
-        if lat<0:
-            if mpl.rcParams['text.usetex']:
-                if labelstyle=='+/-':
-                    latlabstr = r'${\/-%s\/^{\circ}}$'%fmt
+
+def _setlatlab(fmt, lat, labelstyle):
+    """Set latitude label string (called by :meth:`Basemap.drawparallels`)."""
+
+    try:
+        # `fmt` is a function that returns a formatted string.
+        latlab = fmt(lat)
+    except:
+        # `fmt` is a format string.
+        degchar = b"\xc2\xb0".decode("utf-8")
+        if lat < 0:
+            if mpl.rcParams["text.usetex"]:
+                if labelstyle == "+/-":
+                    latlabstr = r"${\/-%s\/^{\circ}}$" % fmt
                 else:
-                    latlabstr = r'${%s\/^{\circ}\/S}$'%fmt
+                    latlabstr = r"${%s\/^{\circ}\/S}$" % fmt
             else:
-                if labelstyle=='+/-':
-                    latlabstr = u'-%s\N{DEGREE SIGN}'%fmt
+                if labelstyle == "+/-":
+                    latlabstr = r"-%s%s" % (fmt, degchar)
                 else:
-                    latlabstr = u'%s\N{DEGREE SIGN}S'%fmt
-            latlab = latlabstr%np.fabs(lat)
-        elif lat>0:
-            if mpl.rcParams['text.usetex']:
-                if labelstyle=='+/-':
-                    latlabstr = r'${\/+%s\/^{\circ}}$'%fmt
+                    latlabstr = r"%s%sS" % (fmt, degchar)
+            latlab = latlabstr % np.fabs(lat)
+        elif lat > 0:
+            if mpl.rcParams["text.usetex"]:
+                if labelstyle == "+/-":
+                    latlabstr = r"${\/+%s\/^{\circ}}$" % fmt
                 else:
-                    latlabstr = r'${%s\/^{\circ}\/N}$'%fmt
+                    latlabstr = r"${%s\/^{\circ}\/N}$" % fmt
             else:
-                if labelstyle=='+/-':
-                    latlabstr = u'+%s\N{DEGREE SIGN}'%fmt
+                if labelstyle == "+/-":
+                    latlabstr = r"+%s%s" % (fmt, degchar)
                 else:
-                    latlabstr = u'%s\N{DEGREE SIGN}N'%fmt
-            latlab = latlabstr%lat
+                    latlabstr = r"%s%sN" % (fmt, degchar)
+            latlab = latlabstr % lat
         else:
-            if mpl.rcParams['text.usetex']:
-                latlabstr = r'${%s\/^{\circ}}$'%fmt
+            if mpl.rcParams["text.usetex"]:
+                latlabstr = r"${%s\/^{\circ}}$" % fmt
             else:
-                latlabstr = u'%s\N{DEGREE SIGN}'%fmt
-            latlab = latlabstr%lat
+                latlabstr = r"%s%s" % (fmt, degchar)
+            latlab = latlabstr % lat
     return latlab

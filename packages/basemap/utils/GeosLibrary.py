@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2021 Víctor Molina García
-
+# Copyright (c) 2021-2024 Víctor Molina García
+#
 # GeosLibrary.py is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published
 # by the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # GeosLibrary.py is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Lesser General Public License for more details.
-
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with GeosLibrary.py. If not, see <https://www.gnu.org/licenses/>.
 #
@@ -255,6 +255,8 @@ class GeosLibrary(object):
                 build_opts = ["-j", "{0:d}".format(njobs)] + build_opts
             else:
                 config_opts = ["-G", "NMake Makefiles"] + config_opts
+                config_opts += ["-DCMAKE_EXE_LINKER_FLAGS='/MANIFEST:NO'"]
+                config_opts += ["-DCMAKE_SHARED_LINKER_FLAGS='/MANIFEST:NO'"]
                 build_opts.extend([
                     "--",
                     "WIN64={0}".format("YES" if win64 else "NO"),

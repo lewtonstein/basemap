@@ -2,11 +2,12 @@ name: basemap-data-hires
 
 env:
   PKGDIR: "packages/basemap_data_hires"
-  PYTHONWARNINGS: "ignore:DEPRECATION"
+  PIP_DEFAULT_TIMEOUT: 10
   PIP_DISABLE_PIP_VERSION_CHECK: 1
   PIP_PREFER_BINARY: 1
-  PIP_TIMEOUT: 10
   PIP_RETRIES: 0
+  PYTHONUNBUFFERED: "1"
+  PYTHONWARNINGS: "ignore:DEPRECATION"
 
 on:
   push:
@@ -26,10 +27,10 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Upload checkout
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: checkout
           path: .
@@ -42,11 +43,11 @@ jobs:
       max-parallel: 1
     needs: checkout
     runs-on: ubuntu-latest
-    container: "pylegacy/python:${{ matrix.python-version }}-debian-9"
+    container: "pylegacy/python:${{ matrix.python-version }}-debian-10"
     steps:
       -
         name: Download checkout
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: checkout
           path: .
@@ -58,7 +59,7 @@ jobs:
           pip wheel -w dist --no-deps dist/*.zip
       -
         name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts-build
           path: ${{ env.PKGDIR }}/dist
@@ -68,22 +69,22 @@ jobs:
       matrix:
         python-version:
           ["2.6", "2.7", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8",
-           "3.9", "3.10", "3.11"]
+           "3.9", "3.10", "3.11", "3.12"]
       max-parallel: 3
       fail-fast: false
     needs: build
     runs-on: ubuntu-latest
-    container: "pylegacy/python:${{ matrix.python-version }}-debian-9"
+    container: "pylegacy/python:${{ matrix.python-version }}-debian-10"
     steps:
       -
         name: Download checkout
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: checkout
           path: .
       -
         name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: artifacts-build
           path: ${{ env.PKGDIR }}/dist
@@ -102,14 +103,15 @@ jobs:
         python-version:
           ["2.7"]
       max-parallel: 1
+    if: startsWith(github.event.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-latest
-    container: "pylegacy/python:${{ matrix.python-version }}-debian-9"
+    container: "pylegacy/python:${{ matrix.python-version }}-debian-10"
     environment: PyPI
     steps:
       -
         name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: artifacts-build
           path: ${{ env.PKGDIR }}/dist
@@ -129,7 +131,6 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: "${{ secrets.PYPI_TOKEN }}"
           TWINE_REPOSITORY_URL: "${{ secrets.PYPI_REPOSITORY_URL }}"
-        if: startsWith(github.event.ref, 'refs/tags/v')
         run: |
           python -m twine upload --skip-existing                              \
               ${{ env.PKGDIR }}/dist/*.zip                                    \
