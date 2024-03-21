@@ -4871,11 +4871,7 @@ class Basemap(object):
 
             # if no shift necessary, itemindex will be
             # empty, so don't do anything
-<<<<<<< HEAD
-            if fix_wrap_around and np.size(itemindex)>0:
-=======
             if fix_wrap_around and np.all(itemindex != 0) and itemindex.size:
->>>>>>> 461b40269088c936e2feaea12a33991bd96b63b5
                 # check to see if cyclic (wraparound) point included
                 # if so, remove it.
                 if np.abs(lonsin1[0]-lonsin1[-1]) < 1.e-4:
@@ -4917,11 +4913,7 @@ class Basemap(object):
             else:
                 itemindex = 0
 
-<<<<<<< HEAD
-            if fix_wrap_around and np.size(itemindex)>0:
-=======
             if fix_wrap_around and np.all(itemindex != 0) and itemindex.size:
->>>>>>> 461b40269088c936e2feaea12a33991bd96b63b5
                 # check to see if cyclic (wraparound) point included
                 # if so, remove it.
                 if np.abs(lonsin[0]-lonsin[-1]) < 1.e-4:
